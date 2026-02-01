@@ -1,21 +1,22 @@
 #include "OrderPool.h"
 
-OrderPool::OrderPool() {
-    for (size_t i = 0; i < ORDER_POOL_SIZE; ++i) {
-        free_indices_.push(i);
+Order* OrderPool::acquire()
+{
+    if (free_count > 0) {
+        Order* o = free_list[--free_count];
+        *o = Order();
+        return o;
     }
-}
 
-Order* OrderPool::acquire() {
-    if (free_indices_.empty()) {
-        return nullptr;
-    }
-    size_t index = free_indices_.top();
-    free_indices_.pop();
-    return &pool_[index];
-}
+    if (next_free >= CAP) return nullptr;
 
-void OrderPool::release(Order* order) {
-    size_t index = order - pool_.data();
-    free_indices_.push(index);
+    Order* o = &storage[next_free++];
+    *o = Order();
+    return o;
+}
+// dest trop chaud sah 
+void OrderPool::release(Order* o)
+{
+    if (!o) return;
+    if (free_count < CAP) free_list[free_count++] = o;
 }

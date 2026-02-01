@@ -1,91 +1,136 @@
 #include "OrderBookTree.h"
 
-OrderBookTree::OrderBookTree()
+OrderBookTree::OrderBookTree(bool isMinTree)
 {
-    root = nullptr
+    root = nullptr;
     best_order = nullptr;
+    is_min_tree = isMinTree;
 }
 
-void OrderBookTree::rotateLeft(Order*& node)
+void OrderBookTree::rotateLeft(Order* node)
 {
-    Order* node_second = node->right;
+    Order* y = node->right;
+    node->right = y->left;
+    if (y->left != nullptr) y->left->parent = node;
 
-    node->right = node_second->left;
-    if (node_second->left != nullptr) {
-        node_second->left->parent = node;
-    }
+    y->parent = node->parent;
 
-    node_second->parent = node->parent;
-    if (node->parent == nullptr)
-    {
-        root = node_second;
-    } else if (node == node->parent->left) {
-        node->parent->left = node_second;
-    } else
-    {
-        node->parent->right = node_second;
-    }
-    node_second->left = node;
-    node->parent = node_second;
+    if (node->parent == nullptr) root = y;
+    else if (node == node->parent->left) node->parent->left = y;
+    else node->parent->right = y;
+
+    y->left = node;
+    node->parent = y;
 }
 
-void OrderBookTree::rotateRight(Order*& node)
+void OrderBookTree::rotateRight(Order* node)
 {
-    Order* node_second = node->left;
+    Order* y = node->left;
+    node->left = y->right;
+    if (y->right != nullptr) y->right->parent = node;
 
-    node->left = node_second->right;
-    if (node_second->right != nullptr) {
-        node_second->right->parent = node;
+    y->parent = node->parent;
+
+    if (node->parent == nullptr) root = y;
+    else if (node == node->parent->right) node->parent->right = y;
+    else node->parent->left = y;
+
+    y->right = node;
+    node->parent = y;
+}
+
+void OrderBookTree::fixInsert(Order* node)
+{
+    while (node->parent != nullptr && node->parent->is_red) {
+        Order* p = node->parent;
+        Order* g = p->parent;
+        if (g == nullptr) break;
+
+        if (p == g->left) {
+            Order* u = g->right;
+
+            if (u != nullptr && u->is_red) {
+                p->is_red = false;
+                u->is_red = false;
+                g->is_red = true;
+                node = g;
+            } else {
+                if (node == p->right) {
+                    node = p;
+                    rotateLeft(node);
+                    p = node->parent;
+                    g = p ? p->parent : nullptr;
+                    if (!g) break;
+                }
+                p->is_red = false;
+                g->is_red = true;
+                rotateRight(g);
+            }
+        } else {
+            Order* u = g->left;
+
+            if (u != nullptr && u->is_red) {
+                p->is_red = false;
+                u->is_red = false;
+                g->is_red = true;
+                node = g;
+            } else {
+                if (node == p->left) {
+                    node = p;
+                    rotateRight(node);
+                    p = node->parent;
+                    g = p ? p->parent : nullptr;
+                    if (!g) break;
+                }
+                p->is_red = false;
+                g->is_red = true;
+                rotateLeft(g);
+            }
+        }
     }
 
-    node_second->parent = node->parent;
-    if (node->parent == nullptr)
-    {
-        root = node_second;
-    } else if (node == node->parent->right) {
-        node->parent->right = node_second;
-    } else
-    {
-        node->parent->left = node_second;
-    }
-    node_second->right = node;
-    node->parent = node_second;
+    if (root != nullptr) root->is_red = false;
+}
+
+void OrderBookTree::transplant(Order* u, Order* v)
+{
+    if (u->parent == nullptr) root = v;
+    else if (u == u->parent->left) u->parent->left = v;
+    else u->parent->right = v;
+
+    if (v != nullptr) v->parent = u->parent;
+}
+
+Order* OrderBookTree::minimum(Order* node)
+{
+    while (node != nullptr && node->left != nullptr) node = node->left;
+    return node;
 }
 
 void OrderBookTree::insert(Order* newOrder)
 {
-    Order* parent_order = nullptr;
-    Order* current_order = root;
-    while (current_order != nullptr)
-    {
-        parent_order = current_order;
-        if (newOrder->price < current_order->price)
-        {
-            current_order = current_order->left;
-        } else if (current_order->price < newOrder->price)
-        {
-            current_order = current_order->right;
-        } else {
-            current_order = current_order->right;
-        }
+    Order* parent = nullptr;
+    Order* cur = root;
+
+    while (cur != nullptr) {
+        parent = cur;
+        if (newOrder->price < cur->price) cur = cur->left;
+        else cur = cur->right;
     }
-    newOrder->parent = parent_order;
+
+    newOrder->parent = parent;
     newOrder->left = nullptr;
     newOrder->right = nullptr;
     newOrder->is_red = true;
-    fixOrder(newOrder);
-    if (parent_order == nullptr) {
-        root = newOrder;
-    } else if (newOrder->price < parent_order->price) {
-        parent_order->left = newOrder;
-    } else if (newOrder->price > parent_order->price) {
-        parent_order->right = newOrder;
-    } else {
-        parent_order->right = newOrder;
-    }
-    if (best_order == nullptr) {
-        best_order = newOrder;
-    } else {
+
+    if (parent == nullptr) root = newOrder;
+    else if (newOrder->price < parent->price) parent->left = newOrder;
+    else parent->right = newOrder;
+
+    fixInsert(newOrder);
+
+    if (best_order == nullptr) best_order = newOrder;
+    else {
         if (is_min_tree) {
             if (newOrder->price < best_order->price) best_order = newOrder;
         } else {
@@ -93,179 +138,142 @@ void OrderBookTree::insert(Order* newOrder)
         }
     }
 }
-void OrderBookTree::fixInsert(Order* order) {
-    while (order->parent != nullptr && order->parent->is_red) {
-        if (order->parent == order->parent->parent->left) {
-            Order* oncle = order->parent->parent->right;
 
-            if (oncle != nullptr && oncle->is_red) {
-                order->parent->is_red = false;
-                oncle->is_red = false;
-                order->parent->parent->is_red = true;
-                order = order->parent->parent;
-            } else {
-                if (order == order->parent->right) {
-                    order = order->parent;
-                    rotateLeft(order);
-                }
-                order->parent->is_red = false;
-                order->parent->parent->is_red = true;
-                rotateRight(order->parent->parent);
-            }
-        } else {
-            Order* oncle = order->parent->parent->left;
-
-            if (oncle != nullptr && oncle->is_red) {
-                order->parent->is_red = false;
-                oncle->is_red = false;
-                order->parent->parent->is_red = true;
-                order = order->parent->parent;
-            } else {
-                if (order == order->parent->left) {
-                    order = order->parent;
-                    rotateRight(order);
-                }
-                order->parent->is_red = false;
-                order->parent->parent->is_red = true;
-                rotateLeft(order->parent->parent);
-            }
-        }
-    }
-
-    root->is_red = false;
-}
-void OrderBookTree::transplant(Order* u, Order* v) {
-    if (u->parent == nullptr) {
-        root = v;
-    } else if (u == u->parent->left) {
-        u->parent->left = v;
-    } else {
-        u->parent->right = v;
-    }
-    if (v != nullptr) {
-        v->parent = u->parent;
-    }
-}
-Order* OrderBookTree::minimum(Order* node) {
-    while (node->left != nullptr) {
-        node = node->left;
-    }
-    return node;
-}
-void OrderBookTree::remove(Order* order) {
-    if (order == best_order) {
-        best_order = nullptr;
-    }
-    Order* y = order;
-    bool y_original_color = y->is_red;
-    Order* x = nullptr;
-
-    if (order->left == nullptr) {
-        x = order->right;
-        transplant(order, order->right);
-    } else if (order->right == nullptr) {
-        x = order->left;
-        transplant(order, order->left);
-    } else {
-        y = minimum(order->right);
-        y_original_color = y->is_red;
-        x = y->right;
-        if (y->parent == order) {
-            if (x != nullptr) {
-                x->parent = y;
-            }
-        } else {
-            transplant(y, y->right);
-            y->right = order->right;
-            y->right->parent = y;
-        }
-        transplant(order, y);
-        y->left = order->left;
-        y->left->parent = y;
-        y->is_red = order->is_red;
-    }
-
-    if (!y_original_color) {
-        fixDelete(x);
-    }
-
-    if (best_order == nullptr && root != nullptr) {
-        best_order = root;
-        if (is_min_tree) {
-            while (best_order->left != nullptr) best_order = best_order->left;
-        } else {
-            while (best_order->right != nullptr) best_order = best_order->right;
-        }
-    }
-}
-void OrderBookTree::fixDelete(Order*& node)
+void OrderBookTree::fixDelete(Order* x, Order* parent)
 {
-    while (order != root && (order == nullptr || order->is_red == false)) {
-        if (order == order->parent->left) {
-            Order* w = order->parent->right;
-            if (w != nullptr) {
-                if (w->is_red) {
-                    w->is_red = false;
-                    order->parent->is_red = true;
-                    rotateLeft(order->parent);
-                    w = order->parent->right;
-                }
+    while (x != root && (x == nullptr || x->is_red == false)) {
 
-                if ((w->left == nullptr || w->left->is_red == false) &&
-                    (w->right == nullptr || w->right->is_red == false)) {
-                    w->is_red = true;
-                    order = order->parent;
-                }
-                else if (w->right == nullptr || w->right->is_red == false) {
+        if (parent == nullptr) break;
+
+        if (x == parent->left) {
+            Order* w = parent->right;
+
+            if (w != nullptr && w->is_red) {
+                w->is_red = false;
+                parent->is_red = true;
+                rotateLeft(parent);
+                w = parent->right;
+            }
+
+            bool wLeftBlack  = (w == nullptr || w->left == nullptr || w->left->is_red == false);
+            bool wRightBlack = (w == nullptr || w->right == nullptr || w->right->is_red == false);
+
+            if (wLeftBlack && wRightBlack) {
+                if (w != nullptr) w->is_red = true;
+                x = parent;
+                parent = x->parent;
+            } else {
+                if (w != nullptr && (w->right == nullptr || w->right->is_red == false)) {
                     if (w->left != nullptr) w->left->is_red = false;
                     w->is_red = true;
                     rotateRight(w);
-                    w = order->parent->right;
-                }
-                else {
-                    w->is_red = order->parent->is_red;
-                    order->parent->is_red = false;
-                    if (w->right != nullptr) w->right->is_red = false;
-                    rotateLeft(order->parent);
-                    order = root;
-                }
-            }
-        } else {
-            Order* w = order->parent->left;
-            if (w != nullptr) {
-                if (w->is_red) {
-                    w->is_red = false;
-                    order->parent->is_red = true;
-                    rotateRight(order->parent);
-                    w = order->parent->left;
+                    w = parent->right;
                 }
 
-                if ((w->right == nullptr || w->right->is_red == false) &&
-                    (w->left == nullptr || w->left->is_red == false)) {
-                    w->is_red = true;
-                    order = order->parent;
+                if (w != nullptr) {
+                    w->is_red = parent->is_red;
+                    if (w->right != nullptr) w->right->is_red = false;
                 }
-                else if (w->left == nullptr || w->left->is_red == false) {
+                parent->is_red = false;
+                rotateLeft(parent);
+                x = root;
+            }
+        } else {
+            Order* w = parent->left;
+
+            if (w != nullptr && w->is_red) {
+                w->is_red = false;
+                parent->is_red = true;
+                rotateRight(parent);
+                w = parent->left;
+            }
+
+            bool wRightBlack = (w == nullptr || w->right == nullptr || w->right->is_red == false);
+            bool wLeftBlack  = (w == nullptr || w->left == nullptr || w->left->is_red == false);
+
+            if (wRightBlack && wLeftBlack) {
+                if (w != nullptr) w->is_red = true;
+                x = parent;
+                parent = x->parent;
+            } else {
+                if (w != nullptr && (w->left == nullptr || w->left->is_red == false)) {
                     if (w->right != nullptr) w->right->is_red = false;
                     w->is_red = true;
                     rotateLeft(w);
-                    w = order->parent->left;
+                    w = parent->left;
                 }
-                else {
-                    w->is_red = order->parent->is_red;
-                    order->parent->is_red = false;
+
+                if (w != nullptr) {
+                    w->is_red = parent->is_red;
                     if (w->left != nullptr) w->left->is_red = false;
-                    rotateRight(order->parent);
-                    order = root;
                 }
+                parent->is_red = false;
+                rotateRight(parent);
+                x = root;
             }
         }
     }
-    if (order != nullptr) {
-        order->is_red = false;
-    }
-}
-Order* OrderBookTree::getBest() {
-    return best_order;
+
+    if (x != nullptr) x->is_red = false;
 }
 
+void OrderBookTree::remove(Order* order)
+{
+    if (order == nullptr) return;
+    if (order == best_order) best_order = nullptr;
+
+    Order* y = order;
+    bool yOriginalRed = y->is_red;
+
+    Order* x = nullptr;
+    Order* xParent = nullptr;
+
+    if (order->left == nullptr) {
+        x = order->right;
+        xParent = order->parent;
+        transplant(order, order->right);
+    } else if (order->right == nullptr) {
+        x = order->left;
+        xParent = order->parent;
+        transplant(order, order->left);
+    } else {
+        y = minimum(order->right);
+        yOriginalRed = y->is_red;
+        x = y->right;
+
+        if (y->parent == order) {
+            xParent = y;
+        } else {
+            xParent = y->parent;
+            transplant(y, y->right);
+            y->right = order->right;
+            if (y->right) y->right->parent = y;
+        }
+
+        transplant(order, y);
+        y->left = order->left;
+        if (y->left) y->left->parent = y;
+        y->is_red = order->is_red;
+    }
+
+    if (yOriginalRed == false) {
+        fixDelete(x, xParent);
+    }
+
+    // recalcul best_order simple
+    if (root == nullptr) {
+        best_order = nullptr;
+    } else if (best_order == nullptr) {
+        best_order = root;
+        if (is_min_tree) {
+            while (best_order->left) best_order = best_order->left;
+        } else {
+            while (best_order->right) best_order = best_order->right;
+        }
+    }
+}
+
+Order* OrderBookTree::getBest()
+{
+    return best_order;
+}
